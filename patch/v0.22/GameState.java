@@ -29,6 +29,8 @@ public class GameState {
 
     public volatile float trackingTargetAngularDiameter = 3.20f;
     public volatile float sixTargetAngularDiameter = 1.55f;
+    // Legacy field kept only so the unused OpenGL renderer from the base project still compiles.
+    public volatile float targetAngularDiameter = 1.55f;
 
     public volatile float sixBoundaryWidthDeg = 68f;
     public volatile float sixBoundaryHeightDeg = 38f;
