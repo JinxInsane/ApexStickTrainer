@@ -4,7 +4,7 @@ on:
   push:
     paths:
       - 'ApexStickTrainerNative_v0.2_GitHubReady.zip'
-      - 'patch/v0.21/**'
+      - 'patch/v0.22/**'
       - '.github/workflows/build-apk.yml'
 
 jobs:
@@ -27,19 +27,21 @@ jobs:
           SDKMANAGER="$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager"
           yes | "$SDKMANAGER" --licenses >/dev/null || true
           "$SDKMANAGER" "platform-tools" "platforms;android-35" "build-tools;35.0.0"
-      - name: Build crash-safe APK
+      - name: Build v0.2.2 APK
         run: |
           rm -rf srcpkg
           mkdir srcpkg
           unzip -q ApexStickTrainerNative_v0.2_GitHubReady.zip -d srcpkg
           APPDIR="srcpkg/ApexStickTrainerNative_v0.2"
           PKG="$APPDIR/app/src/main/java/com/openai/apexsticktrainer"
-          cp patch/v0.21/AimCanvasView.java "$PKG/AimCanvasView.java"
-          cp patch/v0.21/MainActivity.java "$PKG/MainActivity.java"
+          cp patch/v0.22/GameState.java "$PKG/GameState.java"
+          cp patch/v0.22/AimCanvasView.java "$PKG/AimCanvasView.java"
+          cp patch/v0.22/MainActivity.java "$PKG/MainActivity.java"
+          cp patch/v0.22/HudView.java "$PKG/HudView.java"
           cd "$APPDIR"
           gradle --no-daemon :app:assembleDebug
-          cp app/build/outputs/apk/debug/app-debug.apk ../../ApexStickTrainer-v0.2.1.apk
+          cp app/build/outputs/apk/debug/app-debug.apk ../../ApexStickTrainer-v0.2.2.apk
       - uses: actions/upload-artifact@v4
         with:
-          name: ApexStickTrainer-v0.2.1-apk
-          path: ApexStickTrainer-v0.2.1.apk
+          name: ApexStickTrainer-v0.2.2-apk
+          path: ApexStickTrainer-v0.2.2.apk
