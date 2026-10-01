@@ -1,0 +1,260 @@
+package com.openai.apexsticktrainer;
+
+import java.util.Random;
+
+public class GameState {
+    public enum Mode { TRACKING, SIX_TARGETS }
+    public enum SpeedMode { FIXED, RANDOM }
+
+    public volatile Mode mode = Mode.TRACKING;
+    public volatile SpeedMode speedMode = SpeedMode.RANDOM;
+
+    public volatile float fovDeg = 120f;
+    public volatile float hipSensitivity = 4f;
+    public volatile float adsSensitivity = 3f;
+    public volatile float degreesPerSecondPerSensitivity = 60f;
+    public volatile float responseExponent = 1.00f;
+    public volatile float deadzone = 0f;
+
+    public volatile float fixedSpeed = 24f;
+    public volatile float randomSpeedMin = 10f;
+    public volatile float randomSpeedMax = 42f;
+
+    // Probability that a random event changes movement heading.
+    public volatile float directionChangeWeightPct = 12f;
+    // Legacy alias kept for compatibility with older HUD/base code.
+    public volatile float directionReverseWeightPct = 12f;
+
+    // How strongly each random target speed is applied. A range, not one value.
+    public volatile float speedChangeWeightMinPct = 20f;
+    public volatile float speedChangeWeightMaxPct = 55f;
+
+    // Random event interval range.
+    public volatile float speedChangeIntervalMinSec = 0.55f;
+    public volatile float speedChangeIntervalMaxSec = 1.20f;
+
+    public volatile float trackingRadius = 8.0f;
+    public volatile float trackingPitchLimitDeg = 62f;
+
+    public volatile float trackingTargetAngularDiameter = 3.20f;
+    public volatile float sixTargetAngularDiameter = 1.55f;
+    public volatile float targetAngularDiameter = 1.55f;
+
+    public volatile float sixBoundaryWidthDeg = 68f;
+    public volatile float sixBoundaryHeightDeg = 38f;
+    public volatile float sixTargetDistance = 9.0f;
+
+    public volatile float referenceStrengthPct = 42f;
+    public volatile float backgroundBrightnessPct = 18f;
+
+    public volatile float yaw = 0f;
+    public volatile float pitch = 0f;
+    public volatile int shots = 0;
+    public volatile int hits = 0;
+
+    public static class Target {
+        public float yawDeg;
+        public float pitchDeg;
+        public float distance;
+        public boolean active = true;
+    }
+
+    public final Target tracking = new Target();
+    public final Target[] six = new Target[6];
+    public final Random rng = new Random();
+
+    private float trackingSpeedDegPerSec = 24f;
+    // Heading on the local tangent plane. 0=east/yaw+, 90=up/pitch+.
+    private float trackingHeadingDeg = 28f;
+    private float randomTimer = 0f;
+    private float sixCenterYaw = 0f;
+    private float sixCenterPitch = 0f;
+    private float lastSpeedChangeWeightPct = 0f;
+    private boolean lastDirectionChanged = false;
+
+    public GameState() {
+        for (int i = 0; i < six.length; i++) six[i] = new Target();
+        resetTargets();
+    }
+
+    public synchronized void resetTargets() {
+        if (mode == Mode.TRACKING) {
+            tracking.yawDeg = wrap180(yaw + 28f);
+            tracking.pitchDeg = clamp(pitch + 6f, -35f, 35f);
+            tracking.distance = Math.max(2f, trackingRadius);
+            trackingSpeedDegPerSec = speedMode == SpeedMode.RANDOM
+                    ? randomInOrderedRange(randomSpeedMin, randomSpeedMax, 0.1f)
+                    : Math.max(0.1f, fixedSpeed);
+
+            // Start diagonally so it is immediately obvious this is not a flat horizontal sweep.
+            trackingHeadingDeg = rng.nextBoolean() ? 28f : 152f;
+            randomTimer = nextEventInterval();
+            lastSpeedChangeWeightPct = 0f;
+            lastDirectionChanged = false;
+        } else {
+            sixCenterYaw = yaw;
+            sixCenterPitch = clamp(pitch, -55f, 55f);
+            for (Target t : six) respawnSix(t);
+        }
+    }
+
+    public synchronized void update(float dt) {
+        if (mode != Mode.TRACKING) return;
+
+        tracking.distance = Math.max(2.0f, trackingRadius);
+
+        if (speedMode == SpeedMode.RANDOM) {
+            randomTimer -= dt;
+            if (randomTimer <= 0f) {
+                applyRandomMovementEvent();
+                randomTimer = nextEventInterval();
+            }
+        } else {
+            trackingSpeedDegPerSec = Math.max(0.1f, fixedSpeed);
+        }
+
+        moveTrackingOnSphere(dt);
+    }
+
+    private void moveTrackingOnSphere(float dt) {
+        float heading = (float)Math.toRadians(trackingHeadingDeg);
+        float pitchRad = (float)Math.toRadians(tracking.pitchDeg);
+
+        // Compensate longitude rate by cos(latitude) so angular motion stays natural.
+        float cosPitch = Math.max(0.28f, Math.abs((float)Math.cos(pitchRad)));
+        float yawRate = (float)Math.cos(heading) * trackingSpeedDegPerSec / cosPitch;
+        float pitchRate = (float)Math.sin(heading) * trackingSpeedDegPerSec;
+
+        tracking.yawDeg = wrap180(tracking.yawDeg + yawRate * dt);
+        tracking.pitchDeg += pitchRate * dt;
+
+        float limit = clamp(trackingPitchLimitDeg, 25f, 82f);
+        if (tracking.pitchDeg > limit) {
+            tracking.pitchDeg = limit - (tracking.pitchDeg - limit);
+            trackingHeadingDeg = normalize360(-trackingHeadingDeg);
+        } else if (tracking.pitchDeg < -limit) {
+            tracking.pitchDeg = -limit + (-limit - tracking.pitchDeg);
+            trackingHeadingDeg = normalize360(-trackingHeadingDeg);
+        }
+    }
+
+    private void applyRandomMovementEvent() {
+        float lo = Math.max(0.1f, Math.min(randomSpeedMin, randomSpeedMax));
+        float hi = Math.max(lo, Math.max(randomSpeedMin, randomSpeedMax));
+
+        float candidateSpeed = lerp(lo, hi, rng.nextFloat());
+        float wLo = clamp(Math.min(speedChangeWeightMinPct, speedChangeWeightMaxPct), 0f, 100f);
+        float wHi = clamp(Math.max(speedChangeWeightMinPct, speedChangeWeightMaxPct), 0f, 100f);
+        float weightPct = lerp(wLo, wHi, rng.nextFloat());
+        trackingSpeedDegPerSec = clamp(
+                lerp(trackingSpeedDegPerSec, candidateSpeed, weightPct / 100f),
+                lo, hi);
+        lastSpeedChangeWeightPct = weightPct;
+
+        // Direction changes are independent from speed changes.
+        // Low weight means the ball keeps its current course for many events.
+        float chance = clamp(directionChangeWeightPct, 0f, 100f) / 100f;
+        lastDirectionChanged = rng.nextFloat() < chance;
+        if (lastDirectionChanged) {
+            float minTurn = 25f;
+            float maxTurn = 115f;
+            float delta = lerp(minTurn, maxTurn, rng.nextFloat());
+            if (rng.nextBoolean()) delta = -delta;
+            trackingHeadingDeg = normalize360(trackingHeadingDeg + delta);
+        }
+    }
+
+    public synchronized boolean shootAtCenter() {
+        shots++;
+        boolean hit = false;
+        if (mode == Mode.TRACKING) {
+            hit = angularDistanceToCamera(tracking) <= trackingTargetAngularDiameter * 0.5f;
+            if (hit) hits++;
+        } else {
+            for (Target t : six) {
+                if (angularDistanceToCamera(t) <= sixTargetAngularDiameter * 0.5f) {
+                    hit = true;
+                    hits++;
+                    respawnSix(t);
+                    break;
+                }
+            }
+        }
+        return hit;
+    }
+
+    public synchronized float getTrackingSpeedSigned() { return trackingSpeedDegPerSec; }
+    public synchronized float getTrackingSpeed() { return trackingSpeedDegPerSec; }
+    public synchronized float getTrackingHeadingDeg() { return trackingHeadingDeg; }
+    public synchronized float getSixCenterYaw() { return sixCenterYaw; }
+    public synchronized float getSixCenterPitch() { return sixCenterPitch; }
+    public synchronized float getLastSpeedChangeWeightPct() { return lastSpeedChangeWeightPct; }
+    public synchronized boolean wasLastEventReversed() { return lastDirectionChanged; }
+    public synchronized boolean wasLastDirectionChanged() { return lastDirectionChanged; }
+
+    public synchronized float getOrbitAngle360() {
+        float a = tracking.yawDeg;
+        while (a < 0f) a += 360f;
+        while (a >= 360f) a -= 360f;
+        return a;
+    }
+
+    private float angularDistanceToCamera(Target t) {
+        float[] a = dirFromAngles(yaw, pitch);
+        float[] b = dirFromAngles(t.yawDeg, t.pitchDeg);
+        float dot = clamp(a[0]*b[0] + a[1]*b[1] + a[2]*b[2], -1f, 1f);
+        return (float)Math.toDegrees(Math.acos(dot));
+    }
+
+    private float nextEventInterval() {
+        float lo = Math.max(0.08f, Math.min(speedChangeIntervalMinSec, speedChangeIntervalMaxSec));
+        float hi = Math.max(lo, Math.max(speedChangeIntervalMinSec, speedChangeIntervalMaxSec));
+        return lerp(lo, hi, rng.nextFloat());
+    }
+
+    private float randomInOrderedRange(float a, float b, float floor) {
+        float lo = Math.max(floor, Math.min(a, b));
+        float hi = Math.max(lo, Math.max(a, b));
+        return lerp(lo, hi, rng.nextFloat());
+    }
+
+    private void respawnSix(Target t) {
+        float halfW = Math.max(4f, sixBoundaryWidthDeg * 0.5f);
+        float halfH = Math.max(3f, sixBoundaryHeightDeg * 0.5f);
+        t.yawDeg = wrap180(sixCenterYaw + lerp(-halfW, halfW, rng.nextFloat()));
+        t.pitchDeg = clamp(sixCenterPitch + lerp(-halfH, halfH, rng.nextFloat()), -72f, 72f);
+        t.distance = Math.max(3f, sixTargetDistance);
+        t.active = true;
+    }
+
+    public static float[] dirFromAngles(float yawDeg, float pitchDeg) {
+        float y = (float)Math.toRadians(yawDeg);
+        float p = (float)Math.toRadians(pitchDeg);
+        float cp = (float)Math.cos(p);
+        return new float[]{
+                cp * (float)Math.sin(y),
+                -(float)Math.sin(p),
+                -cp * (float)Math.cos(y)
+        };
+    }
+
+    public static float wrap180(float x) {
+        while (x > 180f) x -= 360f;
+        while (x < -180f) x += 360f;
+        return x;
+    }
+
+    public static float normalize360(float x) {
+        while (x < 0f) x += 360f;
+        while (x >= 360f) x -= 360f;
+        return x;
+    }
+
+    public static float clamp(float v, float a, float b) {
+        return Math.max(a, Math.min(b, v));
+    }
+
+    private static float lerp(float a, float b, float t) {
+        return a + (b-a)*t;
+    }
+}
