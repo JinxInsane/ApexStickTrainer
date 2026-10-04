@@ -342,9 +342,8 @@ public class AimCanvasView extends View implements Choreographer.FrameCallback {
             if (shoot && !prevShoot) state.shootAtCenter();
 
         } else if (state.mode == GameState.Mode.RECOIL) {
-            // 压枪模式：目标完全静止；只有枪还在实际开火时才算有效命中。
+            // 压枪微调只用每发三层颜色反馈，不播放持续命中音，避免干扰微调与渲染节奏。
             boolean nowHit = shoot && state.weaponFiring && state.isCenterOnRecoilTarget();
-            if (nowHit && !recoilFireHit) playHitTone();
             recoilFireHit = nowHit;
             trackingFireHit = false;
             arcFireHit = false;
