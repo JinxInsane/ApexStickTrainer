@@ -4,7 +4,7 @@ on:
   push:
     paths:
       - 'ApexStickTrainerNative_v0.2_GitHubReady.zip'
-      - 'patch/v0.211/**'
+      - 'patch/v0.212/**'
       - '.github/workflows/build-apk.yml'
 
 jobs:
@@ -27,22 +27,22 @@ jobs:
           SDKMANAGER="$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager"
           yes | "$SDKMANAGER" --licenses >/dev/null || true
           "$SDKMANAGER" "platform-tools" "platforms;android-35" "build-tools;35.0.0"
-      - name: Build v0.2.11 APK
+      - name: Build v0.2.12 APK
         run: |
-          mkdir srcpkg_v0211
-          unzip -q ApexStickTrainerNative_v0.2_GitHubReady.zip -d srcpkg_v0211
-          APPDIR="srcpkg_v0211/ApexStickTrainerNative_v0.2"
+          mkdir srcpkg_v0212
+          unzip -q ApexStickTrainerNative_v0.2_GitHubReady.zip -d srcpkg_v0212
+          APPDIR="srcpkg_v0212/ApexStickTrainerNative_v0.2"
           PKG="$APPDIR/app/src/main/java/com/openai/apexsticktrainer"
-          cp patch/v0.210/GameState.java "$PKG/GameState.java"
-          cp patch/v0.210/AimCanvasView.java "$PKG/AimCanvasView.java"
-          cp patch/v0.211/MainActivity.java "$PKG/MainActivity.java"
-          cp patch/v0.210/HudView.java "$PKG/HudView.java"
-          sed -i "s/versionCode 2/versionCode 11/" "$APPDIR/app/build.gradle"
-          sed -i "s/versionName '0.2-native'/versionName '0.2.11'/" "$APPDIR/app/build.gradle"
+          cp patch/v0.212/GameState.java "$PKG/GameState.java"
+          cp patch/v0.212/AimCanvasView.java "$PKG/AimCanvasView.java"
+          cp patch/v0.212/MainActivity.java "$PKG/MainActivity.java"
+          cp patch/v0.212/HudView.java "$PKG/HudView.java"
+          sed -i "s/versionCode 2/versionCode 12/" "$APPDIR/app/build.gradle"
+          sed -i "s/versionName '0.2-native'/versionName '0.2.12'/" "$APPDIR/app/build.gradle"
           cd "$APPDIR"
           gradle --no-daemon :app:assembleDebug
-          cp app/build/outputs/apk/debug/app-debug.apk ../../ApexStickTrainer-v0.2.11.apk
+          cp app/build/outputs/apk/debug/app-debug.apk ../../ApexStickTrainer-v0.2.12.apk
       - uses: actions/upload-artifact@v4
         with:
-          name: ApexStickTrainer-v0.2.11-apk
-          path: ApexStickTrainer-v0.2.11.apk
+          name: ApexStickTrainer-v0.2.12-apk
+          path: ApexStickTrainer-v0.2.12.apk
