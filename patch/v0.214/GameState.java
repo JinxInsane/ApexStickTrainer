@@ -531,6 +531,10 @@ public class GameState {
         return angularDistanceToCamera(recoilTarget) <= recoilTargetAngularDiameter * 0.5f;
     }
 
+    public synchronized float getRecoilCenterErrorDeg() {
+        return angularDistanceToCamera(recoilTarget);
+    }
+
     public synchronized float getTrackingCenterErrorDeg() {
         return angularDistanceToCamera(tracking);
     }
