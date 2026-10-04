@@ -81,14 +81,19 @@ public class AimCanvasView extends View implements Choreographer.FrameCallback {
 
     @Override public void doFrame(long now) {
         if (!running) return;
-        float dt = lastNs == 0L ? 1f/60f : Math.min(0.05f, (now-lastNs)/1_000_000_000f);
+        float rawDt = lastNs == 0L ? 1f/60f : Math.max(0f, (now-lastNs)/1_000_000_000f);
         lastNs = now;
-        updateCamera(dt);
-        state.update(dt);
+
+        // 旧版把dt强制截到0.05秒，低于20FPS时会让“固定速度”实际变慢。
+        // 现在目标与镜头最多只防御极端>250ms卡顿；正常低帧率仍按真实经过时间推进。
+        float simDt = Math.min(0.25f, rawDt);
+        updateCamera(simDt);
+        state.update(simDt);
         updateShootingFeedback();
 
         boolean wasTrainingActive = state.trainingActive;
-        state.tickTraining60s(dt, trackingFireHit || arcFireHit);
+        // 计时使用真实经过时间，不受渲染帧率影响。
+        state.tickTraining60s(rawDt, trackingFireHit || arcFireHit);
         if (wasTrainingActive && !state.trainingActive && state.trainingFinished && trainingListener != null) {
             trainingListener.onTrainingFinished();
         }
