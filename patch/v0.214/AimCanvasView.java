@@ -82,6 +82,11 @@ public class AimCanvasView extends View implements Choreographer.FrameCallback {
     private final float[] kickAge = new float[MAX_ACTIVE_KICKS];
     private final float[] kickApplied = new float[MAX_ACTIVE_KICKS];
 
+    // 压枪微调靶三层命中闪烁：1=中心红，2=第二层黄，3=第三层蓝。
+    private int recoilFlashTier = 0;
+    private float recoilFlashRemainingSec = 0f;
+    private static final float RECOIL_FLASH_DURATION_SEC = 0.10f;
+
     public AimCanvasView(Context c, GameState s, ControllerInput i) {
         super(c);
         state = s;
@@ -139,6 +144,10 @@ public class AimCanvasView extends View implements Choreographer.FrameCallback {
         float simDt = Math.min(0.25f, rawDt);
         updateCamera(simDt);
         updateWeaponRecoil(simDt);
+        if (recoilFlashRemainingSec > 0f) {
+            recoilFlashRemainingSec = Math.max(0f, recoilFlashRemainingSec - simDt);
+            if (recoilFlashRemainingSec <= 0f) recoilFlashTier = 0;
+        }
         state.update(simDt);
         updateShootingFeedback();
 
@@ -172,6 +181,8 @@ public class AimCanvasView extends View implements Choreographer.FrameCallback {
         weaponNextShot = 0;
         weaponTriggerWasDown = false;
         clearActiveKicks();
+        recoilFlashTier = 0;
+        recoilFlashRemainingSec = 0f;
         state.resetWeaponRuntime();
     }
 
@@ -232,6 +243,9 @@ public class AimCanvasView extends View implements Choreographer.FrameCallback {
     }
 
     private void enqueueNemesisShot(int i) {
+        // 子弹命中判定发生在这一发后坐力开始之前，符合“先出弹、随后枪口上跳”的手感。
+        registerRecoilTargetHit();
+
         float mul = GameState.clamp(state.nemesisRecoilMultiplier, 0f, 3f);
         float deg = GameState.NEMESIS_BASE_DEG_PER_UNIT * mul;
         float yawKick = NEMESIS_RECOIL_X[i] * deg;
@@ -260,6 +274,25 @@ public class AimCanvasView extends View implements Choreographer.FrameCallback {
         state.weaponCurrentShot = i + 1;
         state.weaponMagazineRemaining = NEMESIS_RECOIL_X.length - (i + 1);
         state.weaponFiring = true;
+    }
+
+    private void registerRecoilTargetHit() {
+        float error = state.getRecoilCenterErrorDeg();
+        float outerRadius = Math.max(0.15f, state.recoilTargetAngularDiameter * 0.5f);
+        float centerRadius = outerRadius / 3f;
+        float secondRadius = outerRadius * 2f / 3f;
+
+        if (error <= centerRadius) {
+            recoilFlashTier = 1;
+        } else if (error <= secondRadius) {
+            recoilFlashTier = 2;
+        } else if (error <= outerRadius) {
+            recoilFlashTier = 3;
+        } else {
+            recoilFlashTier = 0;
+        }
+
+        recoilFlashRemainingSec = recoilFlashTier == 0 ? 0f : RECOIL_FLASH_DURATION_SEC;
     }
 
     private void advanceActiveKicks(float dt) {
@@ -386,13 +419,52 @@ public class AimCanvasView extends View implements Choreographer.FrameCallback {
             int arcColor = arcFireHit ? 0xff55e88a : 0xffffb347;
             drawTarget(canvas, state.arc, arcColor, state.arcTargetAngularDiameter);
         } else if (state.mode == GameState.Mode.RECOIL) {
-            int recoilColor = recoilFireHit ? 0xff55e88a : 0xff67b7ff;
-            drawTarget(canvas, state.recoilTarget, recoilColor, state.recoilTargetAngularDiameter);
+            drawRecoilTarget(canvas);
         } else {
             for (GameState.Target t : state.six) {
                 drawTarget(canvas, t, 0xffff715c, state.sixTargetAngularDiameter);
             }
         }
+    }
+
+    private void drawRecoilTarget(Canvas canvas) {
+        GameState.Target t = state.recoilTarget;
+        float relYaw = shortest(t.yawDeg, state.yaw);
+        float relPitch = t.pitchDeg - state.pitch;
+        float hFov = GameState.clamp(state.fovDeg, 50f, 150f);
+        float halfH = hFov * 0.5f;
+        float aspect = Math.max(0.1f, getWidth() / (float)Math.max(1, getHeight()));
+        double vFov = 2.0 * Math.atan(Math.tan(Math.toRadians(hFov) * 0.5) / aspect);
+        float halfV = (float)Math.toDegrees(vFov) * 0.5f;
+        if (Math.abs(relYaw) > halfH + 8f || Math.abs(relPitch) > halfV + 8f) return;
+
+        float x = projectX(relYaw, halfH);
+        float y = projectY(relPitch, halfV);
+        float outerRadiusPx = (float)(Math.tan(Math.toRadians(Math.max(0.3f, state.recoilTargetAngularDiameter) * 0.5))
+                * getWidth() * 0.5 / Math.tan(Math.toRadians(halfH)));
+        outerRadiusPx = Math.max(12f, outerRadiusPx);
+        float secondRadiusPx = outerRadiusPx * 2f / 3f;
+        float centerRadiusPx = outerRadiusPx / 3f;
+
+        // 三层静态微调靶。默认保持暗色，命中对应层后只闪该层。
+        paint.setStyle(Paint.Style.FILL);
+        paint.setColor(recoilFlashTier == 3 ? 0xff318cff : 0xff26364a);
+        canvas.drawCircle(x, y, outerRadiusPx, paint);
+
+        paint.setColor(recoilFlashTier == 2 ? 0xffffd23f : 0xff354457);
+        canvas.drawCircle(x, y, secondRadiusPx, paint);
+
+        paint.setColor(recoilFlashTier == 1 ? 0xffff4b4b : 0xff465263);
+        canvas.drawCircle(x, y, centerRadiusPx, paint);
+
+        // 清晰的三层边界。
+        paint.setStyle(Paint.Style.STROKE);
+        paint.setStrokeWidth(2f);
+        paint.setColor(0xffd9e1eb);
+        canvas.drawCircle(x, y, outerRadiusPx, paint);
+        canvas.drawCircle(x, y, secondRadiusPx, paint);
+        canvas.drawCircle(x, y, centerRadiusPx, paint);
+        paint.setStyle(Paint.Style.FILL);
     }
 
     private int backgroundColor(float pct) {
