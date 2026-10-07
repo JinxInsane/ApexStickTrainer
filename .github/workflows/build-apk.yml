@@ -6,6 +6,7 @@ on:
       - 'ApexStickTrainerNative_v0.2_GitHubReady.zip'
       - 'patch/v0.214/**'
       - 'patch/v0.215/**'
+      - 'patch/v0.216/**'
       - '.github/workflows/build-apk.yml'
 
 jobs:
@@ -28,23 +29,24 @@ jobs:
           SDKMANAGER="$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager"
           yes | "$SDKMANAGER" --licenses >/dev/null || true
           "$SDKMANAGER" "platform-tools" "platforms;android-35" "build-tools;35.0.0"
-      - name: Build v0.2.15 APK
+      - name: Build v0.2.16 APK
         run: |
-          mkdir srcpkg_v0215
-          unzip -q ApexStickTrainerNative_v0.2_GitHubReady.zip -d srcpkg_v0215
-          APPDIR="srcpkg_v0215/ApexStickTrainerNative_v0.2"
+          mkdir srcpkg_v0216
+          unzip -q ApexStickTrainerNative_v0.2_GitHubReady.zip -d srcpkg_v0216
+          APPDIR="srcpkg_v0216/ApexStickTrainerNative_v0.2"
           PKG="$APPDIR/app/src/main/java/com/openai/apexsticktrainer"
           cp patch/v0.214/GameState.java "$PKG/GameState.java"
           cp patch/v0.214/AimCanvasView.java "$PKG/AimCanvasView.java"
           cp patch/v0.214/MainActivity.java "$PKG/MainActivity.java"
           cp patch/v0.214/HudView.java "$PKG/HudView.java"
           python3 patch/v0.215/apply.py "$PKG"
-          sed -i "s/versionCode 2/versionCode 15/" "$APPDIR/app/build.gradle"
-          sed -i "s/versionName '0.2-native'/versionName '0.2.15'/" "$APPDIR/app/build.gradle"
+          python3 patch/v0.216/apply.py "$PKG"
+          sed -i "s/versionCode 2/versionCode 16/" "$APPDIR/app/build.gradle"
+          sed -i "s/versionName '0.2-native'/versionName '0.2.16'/" "$APPDIR/app/build.gradle"
           cd "$APPDIR"
           gradle --no-daemon :app:assembleDebug
-          cp app/build/outputs/apk/debug/app-debug.apk ../../ApexStickTrainer-v0.2.15.apk
+          cp app/build/outputs/apk/debug/app-debug.apk ../../ApexStickTrainer-v0.2.16.apk
       - uses: actions/upload-artifact@v4
         with:
-          name: ApexStickTrainer-v0.2.15-apk
-          path: ApexStickTrainer-v0.2.15.apk
+          name: ApexStickTrainer-v0.2.16-apk
+          path: ApexStickTrainer-v0.2.16.apk
