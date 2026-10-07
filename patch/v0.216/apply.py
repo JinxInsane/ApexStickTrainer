@@ -50,15 +50,7 @@ new_triggers = """        // Common Android trigger representations.
 """
 s = replace_once(s, old_triggers, new_triggers, "trigger state handling")
 
-diag_old = """        b.append("device=").append(deviceId)
-         .append("  RX=").append(String.format(Locale.US, "%.3f", rightX))
-         .append(" RY=").append(String.format(Locale.US, "%.3f", rightY)).append("\n");"""
-diag_new = """        b.append("device=").append(deviceId)
-         .append("  RX=").append(String.format(Locale.US, "%.3f", rightX))
-         .append(" RY=").append(String.format(Locale.US, "%.3f", rightY))
-         .append(" ADS=").append(adsPressed ? "1" : "0")
-         .append(" FIRE=").append(shootPressed ? "1" : "0").append("\n");"""
-s = replace_once(s, diag_old, diag_new, "controller diagnostics")
+# ADS/FIRE state is shown live in HudView; no diagnostic string rewrite needed.
 
 helper_anchor = """    private static float normalizeDirectional(float raw, float center, float positiveRaw, float negativeRaw) {"""
 helper = """    private static float readNormalizedTrigger(InputDevice d, MotionEvent e, int axis) {
