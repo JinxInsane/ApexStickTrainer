@@ -307,7 +307,11 @@ s = replace_once(s, old_hit_methods, new_hit_methods, "hit helpers")
 s = replace_once(
     s,
     "    public synchronized float getTrackingCenterErrorDeg() {",
-    "    public synchronized float getRecoilCenterErrorDeg() {\\n        return angularDistanceToCamera(recoilTarget);\\n    }\\n\\n    public synchronized float getTrackingCenterErrorDeg() {",
+    """    public synchronized float getRecoilCenterErrorDeg() {
+        return angularDistanceToCamera(recoilTarget);
+    }
+
+    public synchronized float getTrackingCenterErrorDeg() {""",
     "legacy recoil compile helper"
 )
 
