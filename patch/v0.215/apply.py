@@ -302,6 +302,15 @@ new_hit_methods = """    public synchronized boolean isCenterOnGridTarget() {
     public synchronized float getTrackingCenterErrorDeg() {"""
 s = replace_once(s, old_hit_methods, new_hit_methods, "hit helpers")
 
+# Legacy recoil helper remains referenced only by unreachable v0.2.14 methods in AimCanvasView.
+# Keep this tiny compatibility method so the old code compiles; the recoil mode itself is gone.
+s = replace_once(
+    s,
+    "    public synchronized float getTrackingCenterErrorDeg() {",
+    "    public synchronized float getRecoilCenterErrorDeg() {\\n        return angularDistanceToCamera(recoilTarget);\\n    }\\n\\n    public synchronized float getTrackingCenterErrorDeg() {",
+    "legacy recoil compile helper"
+)
+
 write("GameState.java", s)
 
 # ---------------- AimCanvasView.java ----------------
